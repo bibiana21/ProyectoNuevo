@@ -1,0 +1,487 @@
+---
+title: "Análisis estadístico del uso de las zonas de vuelo"
+author: "Cecilia Otero - Carlos Gil Bellosta"
+date: "19 de enero de 2019"
+output:
+  html_document:
+    highlight: tango
+    theme: united
+    toc: yes
+    toc_float:
+      collapsed: no
+      smooth_scroll: no
+  word_document:
+    toc: yes
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+```
+
+```{r librerias, include=FALSE, message=FALSE}
+library(readxl)
+library(plyr)
+library(reshape2)
+library(pander)
+library(forcats)
+library(vegan)
+library(ca)
+library(ggplot2)
+library(AER)
+
+panderOptions('round',2)
+panderOptions('digits',2)
+```
+
+
+```{r lectura_datos, include=FALSE}
+usos <- read_xlsx("datos/Zonas de vuelo macroestructuras.xlsx", sheet = "Uso zonas de vuelo")
+estructuras <- read_xlsx("datos/Zonas de vuelo macroestructuras.xlsx", sheet = "Macroestructuras")
+tamano_especie <- read_xlsx("datos/Zonas de vuelo macroestructuras.xlsx", sheet = "Tamaño especie")
+```
+
+```{r modificaciones, include=FALSE}
+usos <- as.data.frame(usos)
+colnames(usos) <- c("punto", "fecha", "especie", "n_individuos", "altura", "categoria", "zona")
+usos <- usos[!is.na(usos$especie),]
+usos$n_individuos <- as.numeric(usos$n_individuos)
+usos <- usos[usos$n_individuos > 0,]
+
+tamano_especie <- as.data.frame(tamano_especie)
+colnames(tamano_especie) <- c("especie", "tamano")
+tmp <- c("pequeño", "mediano", "grande")
+names(tmp) <- c("P", "M", "G")
+tamano_especie$tamano <- tmp[tamano_especie$tamano]
+
+estructuras <- as.data.frame(estructuras)
+colnames(estructuras) <- c("punto", "pk", "x", "y", "estructura", "funcion", "altura_estructura", "anchura", "longitud", "adaptaciones", "habitat", "agua")
+```
+
+# Introducción
+
+Este documento describe estadísticamente los usos de vuelo de distintas especies en tramos de vía y sobre ciertas estructuras. Está dividido en dos partes: en la primera se analiza el uso de las zonas de vuelo en macroestructuras y en el segundo el uso de las zonas de vuelo sobre las vías.
+
+# Metodología
+
+Las especies censadas durante el muestreo fueron catalogadas por tamaño (pequeño, mediano y grande). La altura de vuelo se clasificó en 4 categorías: 
+
+* Z1, el vuelo se realizó entre la vía y el cable de la catenaria; 
+* Z2, el vuelo se realizó a una distancia de 2 metros por encima de la catenaria; 
+* Z3, el vuelo se realizó por encima de 2 metros desde la catenaria; y 
+* Z4, en el caso de viaductos, el vuelo se realizó por debajo de las vías. 
+
+Las macroestructuras se clasificaron según su altura como: 
+
+* alta, cuando su altura superó los 12 metros; 
+* media, cuando su altura era entre 7 y 12 metros; y 
+* baja, aquellas cuya altura fue inferior a 7 metros.
+
+La abundancia de aves en cada punto de muestreo se ha calculado como: 
+
+* número de individuos, corresponde al número de individuos total de cada especie censada; 
+* número de contactos, es decir, el número de localizaciones de cada especie independientemente del número de individuos; y 
+* el tamaño de bando, corresponde al número de individuos dividido entre el número de contactos de cada especie.
+
+El análisis de la abundancia de individuos, el número de contactos y tamaño de bando en función de la altura de vuelo y el tamaño de la especie, se ha realizado mediante el test no parámetrico de Kruskal Wallis. Se realizaron análisis no paramétricos, ya que los datos no siguieron una distribución normal. Para analizar la relación estadística entre el tamaño de la especie y la altura de vuelo se realizó una prueba chi cuadrado de contingencia, que permite testar la independencia de dos variables cualitativas. A continuación se realizó un análisis de correspondencias que es una técnica descriptiva para representar las tablas de contingencia.
+
+Los patrones generales de cruce de las vías del ave por las especies se han analizado mediante escalados multidimensionales (NMDS). Se trata de una técnica de análisis multivariante de exploración de datos, muy relacionada con la inducción de patrones extraídos de diseños observacionales. El proceso de cálculo de este análisis persigue representar convenientemente el orden (magnitud de distancias) de las distancias observadas entre los objetos (los pasos de fauna) en un espacio de pocas dimensiones. Para la ordenación de las observaciones (número de registros) se ha utilizado la distancia euclídea como índice de similitud. La elección final del número de dimensiones en las que representar el MDS, ha estado condicionada por el valor del parámetro de stress, escogiendo aquellas configuraciones con valores de stress por debajo de 0.2 (Kruskal 1964; Clarke 1993). Se utilizó el análisis de similitudes (ANOSIM), una prueba no paramétrica que utiliza permutaciones para calcular si existe diferencia significativa entre los grupos. El estadístico de prueba fue el R global, que puede variar de -1 a +1, con un valor cercano a -1, indicando que la variación dentro de los grupos es mayor que la variación entre grupos y un valor cercano a +1 que indica que la variación entre grupos es mayor que la variación dentro de los grupos (Clarke 1993). Estos análisis se realizaron con paquete 'vegan' para R 3.5 (Oksanen et al., 2013; R Development Team Core 2014).
+
+
+# Análisis estadístico del uso de las zonas de vuelo en macroestructuras
+
+Se contabilizaron un total de `r sum(usos$n_individuos)` individuos cruzando las macroestructuras de la línea de alta velocidad a diferentes alturas, pertenecientes a `r length(unique(usos$especie))` especies. La abundancia de especies, número de contactos por muestreo y tamaño medio del bando se muestran en la siguiente tabla:
+
+```{r}
+tmp <- merge(usos, tamano_especie, all.x = TRUE)
+tmp <- tmp[!is.na(tmp$tamano),]
+
+tmp <- ddply(tmp, .(tamano, especie), summarize, individuos = sum(n_individuos), contactos = length(especie), bando = mean(n_individuos))
+tmp <- arrange(tmp, tamano, desc(individuos))
+tmp <- tmp[, c("tamano", "especie", "individuos", "contactos", "bando")]
+colnames(tmp)[1] <- "tamaño"
+class(tmp)
+pander(tmp)
+```
+
+ La distribución por tamaños es la siguiente:
+ 
+```{r}
+tmp <- merge(usos, tamano_especie, all.x = TRUE)
+tmp <- ddply(tmp, .(tamano), summarize, pct = sum(n_individuos), n = sum(n_individuos))
+tmp$pct <- 100 * tmp$pct / sum(tmp$pct)
+tmp <- na.omit(tmp)
+Encoding(tmp$tamano)<-"latin1"
+pander(tmp)
+```
+
+```{r}
+tmp <- merge(usos, tamano_especie, all.x = TRUE)
+tmp <- merge(tmp, estructuras, all.x = TRUE)
+
+format_p_value <- function(p_value){
+    if (p_value < 0.05)
+        return("p < 0.05")
+    paste("p = ", format(p_value, digits = 2))
+}
+
+# poisson_test <- function(datos, formula1, formula0){
+#     modelo1 <- glm(as.formula(formula1), data = datos, family = poisson)
+#     modelo0 <- glm(as.formula(formula0), data = datos, family = poisson)
+#     
+#     anova(modelo1, modelo0, test = "Chisq")$`Pr(>Chi)`[2]
+# }
+
+poisson_test <- function(n){
+    modelo <- glm(n ~ 1, family = poisson)
+
+    dispersiontest(modelo)$p.value
+}
+
+datos <- ddply(tmp, .(especie), summarize, n = sum(n_individuos))
+test_especies <- poisson_test(datos$n)
+
+datos <- ddply(tmp, .(tamano), summarize, n = sum(n_individuos))
+datos <- na.omit(datos)
+test_tamano <- poisson_test(datos$n)
+
+datos <- ddply(tmp, .(altura), summarize, n = sum(n_individuos))
+datos <- na.omit(datos)
+test_altura <- poisson_test(datos$n)
+
+datos <- ddply(tmp, .(habitat), summarize, n = sum(n_individuos))
+datos <- na.omit(datos)
+test_habitat <- poisson_test(datos$n)
+```
+
+Como puede verse en las tablas anteriores, el número de individuos registrado dependió significativamente de la especie (`r format_p_value(test_especies)`) y de su tamaño (`r format_p_value(test_tamano)`). También lo hizo por hábitat circundante (`r format_p_value(test_habitat)`), aunque no por la altura de vuelo (`r format_p_value(test_altura)`).
+
+
+```{r}
+tmp <- merge(usos, tamano_especie, all.x = TRUE)
+tmp <- merge(tmp, estructuras, all.x = TRUE)
+
+datos <- ddply(tmp, .(especie), summarize, n = length(especie))
+test_especies <- poisson_test(datos$n)
+
+datos <- ddply(tmp, .(tamano), summarize, n = length(tamano))
+datos <- na.omit(datos)
+test_tamano <- poisson_test(datos$n)
+
+datos <- ddply(tmp, .(altura), summarize, n = length(altura))
+datos <- na.omit(datos)
+test_altura <- poisson_test(datos$n)
+
+datos <- ddply(tmp, .(habitat), summarize, n = length(habitat))
+datos <- na.omit(datos)
+test_habitat <- poisson_test(datos$n)
+```
+
+El mismo patrón sigue el número de avistamientos: varió significativamente por especie (`r format_p_value(test_especies)`), tamaño (`r format_p_value(test_tamano)`) y hábitat (`r format_p_value(test_habitat)`), pero no en función de la altura de vuelo (`r format_p_value(test_altura)`).
+
+```{r}
+tmp <- merge(usos, tamano_especie, all.x = TRUE)
+tmp <- merge(tmp, estructuras, all.x = TRUE)
+
+# anova_test <- function(datos, formula1, formula0){
+#     modelo1 <- glm(as.formula(formula1), data = datos, family = gaussian)
+#     modelo0 <- glm(as.formula(formula0), data = datos, family = gaussian)
+#     
+#     anova(modelo1, modelo0, test = "Chisq")$`Pr(>Chi)`[2]
+# }
+
+test_especies    <- kruskal.test(n_individuos ~ factor(especie), data = tmp)$p.value
+test_tamano <- kruskal.test(n_individuos ~ factor(tamano), data = tmp)$p.value
+test_altura <- kruskal.test(n_individuos ~ factor(altura), data = tmp)$p.value
+test_habitat <- kruskal.test(n_individuos ~ factor(habitat), data = tmp)$p.value
+```
+
+El tamaño de bando fue significativamente diferente en función de la especie (`r format_p_value(test_especies)`), esto responde al comportamiento gregario de cada especie. No obstante, ni el hábitat circundante (`r format_p_value(test_habitat)`), ni el tamaño de la especie (`r format_p_value(test_tamano)`),  ni la altura de vuelo (`r format_p_value(test_altura)`) tuvieron efectos significativos en el tamaño del bando. No obstante, esos dos últimos criterios son limítrofes, con p-valores muy próximos al punto de corte habitual para la significancia (0.05).
+
+
+```{r}
+tmp <- merge(usos, tamano_especie, all.x = TRUE)
+tmp <- merge(tmp, estructuras, all.x = TRUE, by = "punto")
+
+tmp <- tmp[!is.na(tmp$zona),]
+kk <- table(tmp$zona)
+tmp <- tmp[! (tmp$zona %in% names(kk[kk < 10])),]
+
+report_test <- function(test){
+    mf <- function(x) format(x, digits = 2)
+    paste("X² = ", mf(test$statistic), 
+          ", df = ", mf(test$parameter),
+          ", p-valor = ", mf(test$p.value))
+}
+
+## altura vs tamaño
+altura_tamano <- table(tmp$zona, tmp$tamano)
+test_altura_tamano <- chisq.test(altura_tamano)
+    
+## altura vs macroestructura
+altura_altura <- table(tmp$zona, tmp$altura_estructura)
+test_altura_altura <- chisq.test(altura_altura)
+
+## altura vs habitat
+altura_habitat <- table(tmp$zona, tmp$habitat)
+test_altura_habitat <- chisq.test(altura_habitat)
+```
+
+```{r}
+plot(ca(altura_tamano), main = "Zonas de vuelo en función del\ntamaño de la especie")
+```
+
+El gráfico anterior resume el análisis de correspondencias entre el tamaño de la especie y la altura del vuelo y muestra cómo las especies medianas y pequeñas tendieron a cruzar más por debajo de las vías (Z4) o próximas a la catenaria (Z1). Sin embargo, no existe una diferencia significativa de la altura del vuelo en función del tamaño del individuo (`r report_test(test_altura_tamano)`). 
+
+La altura de vuelo tampoco estuvo significativamente relacionada con la altura de la macroestructura (`r report_test(test_altura_altura)`) ni con el hábitat circundante (`r report_test(test_altura_habitat)`).
+
+```{r, message=FALSE, warning=FALSE, results='hide'}
+# nmds por altura de vuelo
+
+tmp <- usos
+tmp <- tmp[tmp$zona != "Z2", ]
+
+datos <- dcast(tmp, punto + zona ~ especie, value.var = "n_individuos", sum)
+datos <- datos[!is.na(datos$zona),]
+
+nmds_groups <- datos$zona
+
+tmp <- as.matrix(datos[, -(1:2)])
+rownames(tmp) <- datos[,1]
+
+my_nmds <- metaMDS(tmp, k = 2, trymax = 100)
+
+
+# report anosim results
+report_anosim <- function(x){
+    mf <- function(y) format(y, digits = 2)
+    paste("R = ", mf(x$statistic),
+          ", p = ", mf(x$signif))
+}
+
+#plot(my_nmds, main = "Afinidad de especies y zonas de vuelo")
+
+ordiplot(my_nmds, type = "n", main = "Afinidad de especies y zonas de vuelo")
+orditorp(my_nmds, display = "species", col = "red", air = 0.01)
+orditorp(my_nmds, display = "sites", cex = 0.5, air = 0.01, labels = FALSE)
+
+ordihull(my_nmds, groups = nmds_groups, draw = "polygon", col = "gray", label = TRUE, alpha = 0.2)
+
+# anosim
+tmp_dist <- vegdist(tmp)
+my_anosim <- anosim(tmp_dist, nmds_groups)
+
+```
+
+En la representación final mediante el NMDS de la composición de especies en función la altura de vuelo, se observa que existe segregación altamente significativa en la composición de especies según la altura de vuelo (ANOSIM  `r report_anosim(my_anosim)`). Existe una separación muy clara entre las especies que se observaron cruzar por debajo de las vías (Z4) o muy por encima de las estructuras (Z3).
+
+
+```{r, message=FALSE, results='hide'}
+# ndms por hábitat
+
+tmp <- merge(usos, estructuras, all.x = TRUE)
+
+datos <- dcast(tmp, punto + habitat ~ especie, value.var = "n_individuos", sum)
+
+
+nmds_groups <- datos$habitat
+
+tmp <- as.matrix(datos[, -(1:2)])
+rownames(tmp) <- datos[,1]
+
+my_nmds <- metaMDS(tmp, k = 2, trymax = 100)
+#plot(my_nmds, main = "Afinidad de especies y hábitats")
+#cols = c('darkmagenta', 'blue')
+
+ordiplot(my_nmds, type = "n", main = "Afinidad de especies y hábitats")
+orditorp(my_nmds, display = "species", col = "red", air = 0.01)
+orditorp(my_nmds, display = "sites", cex = 0.5, air = 0.01, labels = FALSE)
+
+ordihull(my_nmds, groups = nmds_groups, draw = "polygon", col = "gray", label = TRUE, alpha = 0.2)
+
+
+# anosim
+tmp_dist <- vegdist(tmp)
+my_anosim <- anosim(tmp_dist, nmds_groups)
+```
+
+Sin embargo la composición de especies no fue significativamente diferente en función del hábitat circundante (ANOSIM  `r report_anosim(my_anosim)`), se observa un elevado solapamiento en la composición de especies según los distintos hábitats.
+
+
+# Análisis estadístico de uso de zonas de vuelo en la vía
+
+
+```{r lectura_datos2, include=FALSE}
+usos <- read_xlsx("datos/Zonas de vuelo vía.xlsx", sheet = "Zonas vuelo Vía")
+#estructuras <- read_xlsx("datos/Zonas de vuelo macroestructuras.xlsx", sheet = "Macroestructuras")
+tamano_especie <- read_xlsx("datos/Zonas de vuelo vía.xlsx", sheet = "Tamaño especie")
+```
+
+```{r modificaciones2, include=FALSE}
+usos <- as.data.frame(usos)
+colnames(usos) <- c("punto", "zona", "especie", "n_individuos", "categoria_desc", "categoria")
+# usos <- usos[!is.na(usos$especie),]
+# usos$n_individuos <- as.numeric(usos$n_individuos)
+# usos <- usos[usos$n_individuos > 0,]
+
+tamano_especie <- as.data.frame(tamano_especie)
+colnames(tamano_especie) <- c("especie", "tamano")
+tmp <- c("pequeño", "mediano", "grande")
+names(tmp) <- c("P", "M", "G")
+tamano_especie$tamano <- tmp[tamano_especie$tamano]
+
+# estructuras <- as.data.frame(estructuras)
+# colnames(estructuras) <- c("punto", "pk", "x", "y", "estructura", "funcion", "altura_estructura", "anchura", "longitud", "adaptaciones", "habitat", "agua")
+```
+
+
+Durante la primavera se contabilizó un total de `r sum(usos$n_individuos)` individuos cruzando la línea de alta velocidad a diferentes alturas, pertenecientes a `r length(unique(usos$especie))` especies. La abundancia de especies, número de contactos por muestreo y tamaño medio del bando se muestran en la siguiente tabla:
+
+```{r}
+tmp <- merge(usos, tamano_especie, all.x = TRUE)
+
+tmp <- ddply(tmp, .(tamano, especie), summarize, individuos = sum(n_individuos), contactos = length(especie), bando = mean(n_individuos))
+tmp <- arrange(tmp, tamano, desc(individuos))
+tmp <- tmp[, c("tamano", "especie", "individuos", "contactos", "bando")]
+pander(tmp)
+```
+
+La distribución por tamaños es la siguiente:
+ 
+```{r}
+tmp <- merge(usos, tamano_especie, all.x = TRUE)
+tmp <- ddply(tmp, .(tamano), summarize, pct = sum(n_individuos), total = sum(n_individuos))
+tmp$pct <- 100 * tmp$pct / sum(tmp$pct)
+tmp <- na.omit(tmp)
+pander(tmp)
+```
+
+```{r}
+tmp <- merge(usos, tamano_especie, all.x = TRUE)
+#tmp <- merge(tmp, estructuras, all.x = TRUE)
+
+format_p_value <- function(p_value){
+    if (p_value < 0.05)
+        return("p < 0.05")
+    format(p_value, digits = 2)
+}
+
+datos <- ddply(tmp, .(especie), summarize, n = sum(n_individuos))
+test_especies <- poisson_test(datos$n)
+
+datos <- ddply(tmp, .(tamano), summarize, n = sum(n_individuos))
+datos <- na.omit(datos)
+test_tamano <- poisson_test(datos$n)
+
+datos <- ddply(tmp, .(categoria), summarize, n = sum(n_individuos))
+datos <- na.omit(datos)
+test_altura <- poisson_test(datos$n)
+```
+
+El número de individuos registrado dependió significativamente de la especie (`r format_p_value(test_especies)`). También el número de individuos fue significativamente diferente en función del tamaño de la especie (`r format_p_value(test_tamano)`). Sin embargo, y por un estrecho margen, el número de individuos no fue significativamente diferente según la altura de vuelo (`r format_p_value(test_altura)`).
+
+
+```{r}
+tmp <- merge(usos, tamano_especie, all.x = TRUE)
+#tmp <- merge(tmp, estructuras, all.x = TRUE)
+
+datos <- ddply(tmp, .(especie), summarize, n = length(especie))
+test_especies <- poisson_test(datos$n)
+
+datos <- ddply(tmp, .(tamano), summarize, n = length(tamano))
+datos <- na.omit(datos)
+test_tamano <- poisson_test(datos$n)
+
+datos <- ddply(tmp, .(categoria), summarize, n = length(categoria))
+datos <- na.omit(datos)
+test_altura <- poisson_test(datos$n)
+```
+
+Al igual que con la abundancia, el número de contactos dependió significativamente de la especie (`r format_p_value(test_especies)`). También el número de contactos fue significativamente diferente en función del tamaño de la especie (`r format_p_value(test_tamano)`). Sin embargo, no hubo diferencia significativa en el número de contactos en función de la altura de vuelo (`r format_p_value(test_altura)`).
+
+```{r}
+tmp <- merge(usos, tamano_especie, all.x = TRUE)
+#tmp <- merge(tmp, estructuras, all.x = TRUE)
+
+# anova_test <- function(datos, formula1, formula0){
+#     modelo1 <- glm(as.formula(formula1), data = datos, family = gaussian)
+#     modelo0 <- glm(as.formula(formula0), data = datos, family = gaussian)
+#     
+#     anova(modelo1, modelo0, test = "Chisq")$`Pr(>Chi)`[2]
+# }
+
+test_especies    <- kruskal.test(n_individuos ~ factor(especie), data = tmp)$p.value
+test_tamano <- kruskal.test(n_individuos ~ factor(tamano), data = tmp)$p.value
+test_altura <- kruskal.test(n_individuos ~ factor(categoria), data = tmp)$p.value
+```
+
+El tamaño de bando no varió significativamente en función de la especie (`r format_p_value(test_especies)`), aunque sí en función del tamaño de la especie (`r format_p_value(test_tamano)`). Sin embargo, no hubo diferencias significativas según la altura de vuelo (`r format_p_value(test_altura)`).
+
+
+```{r}
+tmp <- merge(usos, tamano_especie, all.x = TRUE)
+tmp <- tmp[tmp$categoria != "Z4",]   # hay muy pocos
+
+report_test <- function(test){
+    mf <- function(x) format(x, digits = 2)
+    paste("X² = ", mf(test$statistic), 
+          ", df = ", mf(test$parameter),
+          ", p-valor = ", mf(test$p.value))
+}
+
+## altura vs tamaño
+altura_tamano <- table(tmp$categoria, tmp$tamano)
+test_altura_tamano <- chisq.test(altura_tamano)
+```
+
+La altura de vuelo no fue significativamente diferente en función del tamaño del individuo (`r report_test(test_altura_tamano)`). 
+
+```{r}
+tmp <- merge(usos, tamano_especie, all.x = TRUE)
+tmp <- tmp[tmp$categoria != "Z4",]   # hay muy pocos
+tmp <- ddply(tmp, .(tamano, categoria), summarize, n = sum(n_individuos))
+
+ggplot(data = tmp, aes(x = categoria, y = n, fill = tamano)) +
+    geom_bar(stat = "identity", position = position_dodge(), colour = "black") + 
+    xlab("Categorías de altura") + 
+    ylab("Número de individuos") + 
+    scale_fill_discrete(name = "tamaño")
+```
+
+
+```{r, message=FALSE, warning=FALSE, results='hide'}
+# nmds por altura de vuelo
+
+tmp <- usos
+
+datos <- dcast(tmp, punto + categoria ~ especie, value.var = "n_individuos", sum)
+#datos <- datos[!is.na(datos$zona),]
+
+nmds_groups <- datos$categoria
+
+tmp <- as.matrix(datos[, -(1:2)])
+rownames(tmp) <- datos[,1]
+
+my_nmds <- metaMDS(tmp, k = 2, trymax = 100)
+
+#plot(my_nmds, main = "Afinidad de especies y alturas de vuelo")
+
+ordiplot(my_nmds, type = "n", main = "Afinidad de especies y alturas de vuelo")
+orditorp(my_nmds, display = "species", col = "red", air = 0.01)
+orditorp(my_nmds, display = "sites", cex = 0.5, air = 0.01, labels = FALSE)
+
+ordihull(my_nmds, groups = nmds_groups, draw = "polygon", col = "gray", label = TRUE, alpha = 0.2)
+
+# report anosim results
+report_anosim <- function(x){
+    mf <- function(y) format(y, digits = 2)
+    paste("R = ", mf(x$statistic),
+          ", p = ", mf(x$signif))
+}
+
+# anosim
+tmp_dist <- vegdist(tmp)
+my_anosim <- anosim(tmp_dist, nmds_groups)
+
+```
+
+En la representación final mediante el NMDS de la composición de especies en función la altura de vuelo, se observa no existe una segregación significativa (ANOSIM  `r report_anosim(my_anosim)`). 
